@@ -8,10 +8,10 @@ export default function handler(req, res) {
   const { customerNo, customerName, product } = req.body || {};
 
   const productMap = {
-    'MAP 100k': { prefix: 'MAP', name: 'MAP', nominal: 'Rp 100.000' },
-    'Kopi Kenangan 50k': { prefix: 'KOPI', name: 'Kopi Kenangan', nominal: 'Rp 50.000' },
-    'Blibli: 100k': { prefix: 'BLI', name: 'Blibli', nominal: 'Rp 100.000' },
-    'Grab: 50k': { prefix: 'GRAB', name: 'Grab', nominal: 'Rp 50.000' }
+    'MAP': { prefix: 'MAP', name: 'MAP', nominal: 'Rp 100.000' },
+    'Kopi Kenangan': { prefix: 'KOPI', name: 'Kopi Kenangan', nominal: 'Rp 50.000' },
+    'Blibli': { prefix: 'BLI', name: 'Blibli', nominal: 'Rp 100.000' },
+    'Grab': { prefix: 'GRAB', name: 'Grab', nominal: 'Rp 50.000' }
   };
 
   const info = productMap[product] || { prefix: 'VCHR', name: product || 'Voucher', nominal: '' };
