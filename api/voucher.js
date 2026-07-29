@@ -8,13 +8,40 @@ export default function handler(req, res) {
   const { customerNo, customerName, product } = req.body || {};
 
   const productMap = {
-    'MAP': { prefix: 'MAP', name: 'MAP', nominal: 'Rp 100.000' },
-    'Kopi Kenangan': { prefix: 'KOPI', name: 'Kopi Kenangan', nominal: 'Rp 50.000' },
-    'Blibli': { prefix: 'BLI', name: 'Blibli', nominal: 'Rp 100.000' },
-    'Grab': { prefix: 'GRAB', name: 'Grab', nominal: 'Rp 50.000' }
+    'MAP': { prefix: 'MAP', name: 'MAP', nominal: 'Rp 100.000', stock: 50 },
+    'Kopi Kenangan': { prefix: 'KOPI', name: 'Kopi Kenangan', nominal: 'Rp 50.000', stock: 50 },
+    'Blibli': { prefix: 'BLI', name: 'Blibli', nominal: 'Rp 100.000', stock: 50 },
+    'Grab': { prefix: 'GRAB', name: 'Grab', nominal: 'Rp 50.000', stock: 0 }
   };
 
-  const info = productMap[product] || { prefix: 'VCHR', name: product || 'Voucher', nominal: '' };
+  // Produk tidak ditemukan
+  if (!product || !productMap[product]) {
+    return res.status(400).json({
+      success: false,
+      errorType: 'INVALID_PRODUCT',
+      message: 'Produk voucher tidak valid.'
+    });
+  }
+
+  const info = productMap[product];
+
+  // Stok habis
+  if (info.stock <= 0) {
+    return res.status(400).json({
+      success: false,
+      errorType: 'OUT_OF_STOCK',
+      message: 'Maaf, voucher ' + info.name + ' sudah habis.'
+    });
+  }
+
+  // Simulasi random system error (5% chance)
+  if (Math.random() < 0.05) {
+    return res.status(500).json({
+      success: false,
+      errorType: 'SYSTEM_ERROR',
+      message: 'Sistem sedang gangguan. Silakan coba beberapa saat lagi.'
+    });
+  }
 
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let random = '';
