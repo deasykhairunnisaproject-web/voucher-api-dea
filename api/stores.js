@@ -29,7 +29,7 @@ export default async function handler(req, res) {
   // GANTI URL INI dengan link Google Sheets kamu
   // File → Share → Publish to web → CSV
   // =============================================
-  const SHEET_URL = "https://docs.google.com/spreadsheets/d/1aFKwkCYrfOyHipXOuKZiZMonIeTlA8aryfGtu0D-uJU/edit?gid=0#gid=0";
+  const SHEET_URL = "https://docs.google.com/spreadsheets/d/1aFKwkCYrfOyHipXOuKZiZMonIeTlA8aryfGtu0D-uJU/export?format=csv";
 
   // Radius pencarian (KM)
   const RADIUS_KM = 5;
