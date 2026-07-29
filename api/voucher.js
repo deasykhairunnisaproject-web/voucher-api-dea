@@ -26,10 +26,9 @@ export default function handler(req, res) {
     const prev = claimed.get(customerNo);
     return res.status(200).json({
       success: "false",
-      message: 'Kamu sudah pernah claim voucher ' + prev.productName + ' dengan kode ' + prev.voucherCode + '. Setiap customer hanya bisa claim 1 voucher.'
+      message: 'Kamu sudah pernah claim voucher ' + prev.productName + ' dengan kode ' + prev.voucherCode + '. Setiap customer hanya bisa claim 1 voucher. Terima kasih! 🙏'
     });
   }
-
   const info = productMap[product];
 
   if (info.stock <= 0) {
