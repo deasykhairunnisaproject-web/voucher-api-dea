@@ -32,8 +32,8 @@ export default async function handler(req, res) {
   const SHEET_URL = "https://docs.google.com/spreadsheets/d/1aFKwkCYrfOyHipXOuKZiZMonIeTlA8aryfGtu0D-uJU/export?format=csv";
 
   // Radius pencarian (KM)
-  const RADIUS_KM = 5;
-  const MAX_RESULTS = 5;
+  const RADIUS_KM = 10;
+  const MAX_RESULTS = 10;
 
   try {
     const response = await fetch(SHEET_URL);
