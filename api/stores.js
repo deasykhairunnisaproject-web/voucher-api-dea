@@ -116,8 +116,7 @@ export default async function handler(req, res) {
       success: "true",
       count: storesWithDistance.length.toString(),
       storeList: storeList,
-      message: "KATALOG PROMO ada di " + storesWithDistance.length + " toko promo terdekat dari lokasi kamu:\n\n" + storeList,
-      message: "_Periode promo: 1-31 Agustus 2026_*
+      message: "KATALOG PROMO ada di " + storesWithDistance.length + " toko promo terdekat dari lokasi kamu:\n\n" + storeList + "\n_Periode promo: 1-31 Agustus 2026_"
     });
 
   } catch (error) {
