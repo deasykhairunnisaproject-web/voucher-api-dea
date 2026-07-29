@@ -3,7 +3,7 @@ export default function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ success: false, message: 'Method not allowed' });
+  if (req.method !== 'POST') return res.status(200).json({ success: false, message: 'Method not allowed' });
 
   const { customerNo, customerName, product } = req.body || {};
 
@@ -14,32 +14,26 @@ export default function handler(req, res) {
     'Grab': { prefix: 'GRAB', name: 'Grab', nominal: 'Rp 50.000', stock: 0 }
   };
 
-  // Produk tidak ditemukan
   if (!product || !productMap[product]) {
-    return res.status(400).json({
+    return res.status(200).json({
       success: false,
-      errorType: 'INVALID_PRODUCT',
-      message: 'Produk voucher tidak valid.'
+      message: 'Produk voucher tidak valid. Silakan pilih ulang dari menu.'
     });
   }
 
   const info = productMap[product];
 
-  // Stok habis
   if (info.stock <= 0) {
-    return res.status(400).json({
+    return res.status(200).json({
       success: false,
-      errorType: 'OUT_OF_STOCK',
-      message: 'Maaf, voucher ' + info.name + ' sudah habis.'
+      message: 'Mohon maaf, voucher ' + info.name + ' sudah habis untuk saat ini. Silakan pilih voucher lain.'
     });
   }
 
-  // Simulasi random system error (5% chance)
   if (Math.random() < 0.05) {
-    return res.status(500).json({
+    return res.status(200).json({
       success: false,
-      errorType: 'SYSTEM_ERROR',
-      message: 'Sistem sedang gangguan. Silakan coba beberapa saat lagi.'
+      message: 'Sistem sedang dalam perbaikan. Silakan coba beberapa saat lagi.'
     });
   }
 
@@ -56,6 +50,7 @@ export default function handler(req, res) {
     voucherCode: voucherCode,
     productName: info.name,
     nominal: info.nominal,
+    message: '',
     expiryDate: expiry.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
   });
 }
