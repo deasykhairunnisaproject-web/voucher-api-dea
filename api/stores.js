@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Allow CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -7,12 +6,22 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ success: "false", message: 'Method not allowed' });
 
-  const { area } = req.body || {};
+  const { latitude, longitude } = req.body || {};
 
-  if (!area || area.trim() === '') {
+  if (!latitude || !longitude) {
     return res.status(200).json({
       success: "false",
-      message: "Mohon ketik nama kota atau kecamatan kamu ya 😊"
+      message: "Mohon kirimkan lokasi kamu terlebih dahulu ya 😊"
+    });
+  }
+
+  const userLat = parseFloat(latitude);
+  const userLng = parseFloat(longitude);
+
+  if (isNaN(userLat) || isNaN(userLng)) {
+    return res.status(200).json({
+      success: "false",
+      message: "Format lokasi tidak valid. Silakan coba kirim ulang lokasi kamu 🙏"
     });
   }
 
@@ -20,14 +29,17 @@ export default async function handler(req, res) {
   // GANTI URL INI dengan link Google Sheets kamu
   // File → Share → Publish to web → CSV
   // =============================================
-  const SHEET_URL = "https://docs.google.com/spreadsheets/d/1aFKwkCYrfOyHipXOuKZiZMonIeTlA8aryfGtu0D-uJU/edit?usp=sharing";
+  const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/GANTI_DENGAN_ID_KAMU/pub?output=csv";
+
+  // Radius pencarian (KM)
+  const RADIUS_KM = 5;
+  const MAX_RESULTS = 5;
 
   try {
-    // Ambil data dari Google Sheets
     const response = await fetch(SHEET_URL);
     const csvText = await response.text();
 
-    // Parse CSV jadi array of objects
+    // Parse CSV
     const lines = csvText.split('\n');
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
 
@@ -35,7 +47,6 @@ export default async function handler(req, res) {
     for (let i = 1; i < lines.length; i++) {
       if (!lines[i].trim()) continue;
 
-      // Parse CSV line (handle koma di dalam quotes)
       const values = [];
       let current = '';
       let inQuotes = false;
@@ -59,41 +70,53 @@ export default async function handler(req, res) {
       stores.push(store);
     }
 
-    // Filter berdasarkan area (case-insensitive, partial match)
-    const keyword = area.trim().toLowerCase();
-    const results = stores.filter(store => {
-      return (
-        (store.name || '').toLowerCase().includes(keyword) ||
-        (store.area || '').toLowerCase().includes(keyword) ||
-        (store.address || '').toLowerCase().includes(keyword)
-      );
-    });
+    // Hitung jarak pakai Haversine formula
+    function haversine(lat1, lng1, lat2, lng2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
 
-    if (results.length === 0) {
-      // Kumpulkan daftar area yang tersedia
-      const availableAreas = [...new Set(stores.map(s => s.area).filter(Boolean))];
+    // Hitung jarak tiap toko dari user
+    const storesWithDistance = stores
+      .map(store => {
+        const storeLat = parseFloat(store.lat);
+        const storeLng = parseFloat(store.lng);
+        if (isNaN(storeLat) || isNaN(storeLng)) return null;
+        const distance = haversine(userLat, userLng, storeLat, storeLng);
+        return { ...store, distance };
+      })
+      .filter(s => s !== null && s.distance <= RADIUS_KM)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, MAX_RESULTS);
+
+    if (storesWithDistance.length === 0) {
       return res.status(200).json({
         success: "false",
-        message: "Maaf, belum ada toko promo di area \"" + area + "\" saat ini 😊\n\nArea yang tersedia:\n" + availableAreas.join(", ")
+        message: "Maaf, belum ada toko promo dalam radius " + RADIUS_KM + " km dari lokasi kamu 😊\n\nCoba kirim lokasi lain atau perbesar area pencarian ya!"
       });
     }
 
-    // Format daftar toko untuk WhatsApp
+    // Format untuk WhatsApp
     let storeList = "";
-    results.forEach((store, i) => {
-      storeList += (i + 1) + ". *" + store.name + "*\n";
+    storesWithDistance.forEach((store, i) => {
+      const km = store.distance.toFixed(1);
+      storeList += (i + 1) + ". *" + store.name + "* (" + km + " km)\n";
       storeList += "📍 " + store.address + "\n";
       storeList += "🏷️ " + store.promo + "\n";
       if (store.maps) storeList += "🗺️ " + store.maps + "\n";
-      if (i < results.length - 1) storeList += "\n";
+      if (i < storesWithDistance.length - 1) storeList += "\n";
     });
 
     return res.status(200).json({
       success: "true",
-      count: results.length.toString(),
-      area: area,
+      count: storesWithDistance.length.toString(),
       storeList: storeList,
-      message: "Berikut " + results.length + " toko promo di area *" + area + "*:\n\n" + storeList
+      message: "Berikut " + storesWithDistance.length + " toko promo terdekat dari lokasi kamu:\n\n" + storeList
     });
 
   } catch (error) {
