@@ -33,7 +33,7 @@ export default async function handler(req, res) {
 
   // Radius pencarian (KM)
   const RADIUS_KM = 10;
-  const MAX_RESULTS = 10;
+  const MAX_RESULTS = 5;
 
   try {
     const response = await fetch(SHEET_URL);
