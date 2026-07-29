@@ -107,7 +107,7 @@ export default async function handler(req, res) {
       const km = store.distance.toFixed(1);
       storeList += (i + 1) + ". *" + store.name + "* (" + km + " km)\n";
       storeList += "📍 " + store.address + "\n";
-      storeList += "🏷️ " + store.promo + "\n";
+      storeList += "🏷️ *" + store.promo + "*\n";
       if (store.maps) storeList += "🗺️ " + store.maps + "\n";
       if (i < storesWithDistance.length - 1) storeList += "\n";
     });
@@ -116,7 +116,8 @@ export default async function handler(req, res) {
       success: "true",
       count: storesWithDistance.length.toString(),
       storeList: storeList,
-      message: "Berikut " + storesWithDistance.length + " toko promo terdekat dari lokasi kamu:\n\n" + storeList
+      message: "KATALOG PROMO ada di " + storesWithDistance.length + " toko promo terdekat dari lokasi kamu:\n\n" + storeList,
+      message: "_Periode promo: 1-31 Agustus 2026_*
     });
 
   } catch (error) {
