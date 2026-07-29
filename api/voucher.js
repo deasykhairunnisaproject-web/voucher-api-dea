@@ -1,9 +1,12 @@
+// In-memory store (untuk testing)
+const claimed = new Map();
+
 export default function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(200).json({ success: false, message: 'Method not allowed' });
+  if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
 
   const { customerNo, customerName, product } = req.body || {};
 
@@ -15,26 +18,22 @@ export default function handler(req, res) {
   };
 
   if (!product || !productMap[product]) {
+    return res.status(200).json({ success: "false", message: 'Produk voucher tidak valid.' });
+  }
+
+  // Cek apakah customer sudah pernah claim
+  if (claimed.has(customerNo)) {
+    const prev = claimed.get(customerNo);
     return res.status(200).json({
       success: "false",
-      message: 'Produk voucher tidak valid. Silakan pilih ulang dari menu.'
+      message: 'Kamu sudah pernah claim voucher ' + prev.productName + ' dengan kode ' + prev.voucherCode + '. Setiap customer hanya bisa claim 1 voucher.'
     });
   }
 
   const info = productMap[product];
 
   if (info.stock <= 0) {
-    return res.status(200).json({
-      success: "false",
-      message: 'Mohon maaf, voucher ' + info.name + ' sudah habis untuk saat ini. Silakan pilih voucher lain.'
-    });
-  }
-
-  if (Math.random() < 0.05) {
-    return res.status(200).json({
-      success: "false",
-      message: 'Sistem sedang dalam perbaikan. Silakan coba beberapa saat lagi.'
-    });
+    return res.status(200).json({ success: "false", message: 'Mohon maaf, voucher ' + info.name + ' sudah habis. Silakan pilih voucher lain.' });
   }
 
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -44,6 +43,9 @@ export default function handler(req, res) {
 
   const expiry = new Date();
   expiry.setDate(expiry.getDate() + 30);
+
+  // Simpan record claim
+  claimed.set(customerNo, { voucherCode, productName: info.name });
 
   return res.status(200).json({
     success: "true",
