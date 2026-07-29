@@ -16,7 +16,7 @@ export default function handler(req, res) {
 
   if (!product || !productMap[product]) {
     return res.status(200).json({
-      success: false,
+      success: "false",
       message: 'Produk voucher tidak valid. Silakan pilih ulang dari menu.'
     });
   }
@@ -25,14 +25,14 @@ export default function handler(req, res) {
 
   if (info.stock <= 0) {
     return res.status(200).json({
-      success: false,
+      success: "false",
       message: 'Mohon maaf, voucher ' + info.name + ' sudah habis untuk saat ini. Silakan pilih voucher lain.'
     });
   }
 
   if (Math.random() < 0.05) {
     return res.status(200).json({
-      success: false,
+      success: "false",
       message: 'Sistem sedang dalam perbaikan. Silakan coba beberapa saat lagi.'
     });
   }
@@ -46,7 +46,7 @@ export default function handler(req, res) {
   expiry.setDate(expiry.getDate() + 30);
 
   return res.status(200).json({
-    success: true,
+    success: "true",
     voucherCode: voucherCode,
     productName: info.name,
     nominal: info.nominal,
