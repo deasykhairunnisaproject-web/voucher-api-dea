@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   // GANTI URL INI dengan link Google Sheets kamu
   // File → Share → Publish to web → CSV
   // =============================================
-  const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/GANTI_DENGAN_ID_KAMU/pub?output=csv";
+  const SHEET_URL = "https://docs.google.com/spreadsheets/d/1aFKwkCYrfOyHipXOuKZiZMonIeTlA8aryfGtu0D-uJU/edit?usp=sharing";
 
   try {
     // Ambil data dari Google Sheets
