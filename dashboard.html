@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prudential Survey Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #1a1a1a; }
+
+  .header { background: #D32F2F; color: #fff; padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header .subtitle { font-size: 13px; opacity: 0.85; margin-top: 2px; }
+  .refresh-btn { background: rgba(255,255,255,0.2); border: none; color: #fff; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .refresh-btn:hover { background: rgba(255,255,255,0.3); }
+
+  .stats { display: flex; gap: 16px; padding: 24px 32px; }
+  .stat-card { flex: 1; background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .stat-num { font-size: 32px; font-weight: 700; }
+  .stat-label { font-size: 13px; color: #666; margin-top: 4px; }
+  .stat-pending .stat-num { color: #EF6C00; }
+  .stat-eligible .stat-num { color: #2E7D32; }
+  .stat-not .stat-num { color: #D32F2F; }
+
+  .table-container { padding: 0 32px 32px; }
+  .table-card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
+  .table-header { padding: 20px 24px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; }
+  .table-header h2 { font-size: 16px; font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; background: #fafafa; border-bottom: 1px solid #eee; }
+  td { padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover { background: #fafafa; }
+
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+  .badge-pending { background: #FFF3E0; color: #E65100; }
+  .badge-eligible { background: #E8F5E9; color: #2E7D32; }
+  .badge-not { background: #FFEBEE; color: #C62828; }
+
+  .action-btns { display: flex; gap: 6px; }
+  .btn { border: none; padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; transition: opacity 0.2s; }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-eligible { background: #2E7D32; color: #fff; }
+  .btn-not { background: #D32F2F; color: #fff; }
+
+  .empty { text-align: center; padding: 60px 20px; color: #999; }
+  .empty p { margin-top: 8px; font-size: 14px; }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #333; color: #fff; padding: 14px 20px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; max-width: 400px; }
+  .toast.show { opacity: 1; }
+
+  .config-bar { background: #FFF3E0; padding: 12px 32px; font-size: 13px; color: #E65100; display: flex; align-items: center; gap: 8px; }
+  .config-bar strong { font-weight: 600; }
+
+  @media (max-width: 768px) {
+    .stats { flex-direction: column; padding: 16px; }
+    .table-container { padding: 0 16px 16px; }
+    .header { padding: 16px; }
+    th, td { padding: 10px 12px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Prudential Survey Dashboard</h1>
+    <div class="subtitle">Review survey responses and confirm eligibility</div>
+  </div>
+  <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
+</div>
+
+<div class="config-bar">
+  <strong>⚠ Dummy mode active</strong> — No real WhatsApp messages will be sent. Update WABA credentials in api/send-result.js for production.
+</div>
+
+<div class="stats">
+  <div class="stat-card stat-pending">
+    <div class="stat-num" id="stat-pending">0</div>
+    <div class="stat-label">Pending review</div>
+  </div>
+  <div class="stat-card stat-eligible">
+    <div class="stat-num" id="stat-eligible">0</div>
+    <div class="stat-label">Eligible</div>
+  </div>
+  <div class="stat-card stat-not">
+    <div class="stat-num" id="stat-not">0</div>
+    <div class="stat-label">Not eligible</div>
+  </div>
+</div>
+
+<div class="table-container">
+  <div class="table-card">
+    <div class="table-header">
+      <h2>Survey responses</h2>
+    </div>
+    <div id="table-body">
+      <div class="empty">
+        <p>Loading data...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ============================================================
+  // CONFIGURATION — Change this to your Vercel URL
+  // ============================================================
+  const API_BASE = 'https://deaproject.vercel.app';
+
+  let surveyData = [];
+
+  async function loadData() {
+    try {
+      const res = await fetch(`${API_BASE}/api/survey`);
+      const json = await res.json();
+      if (json.success) {
+        surveyData = json.data;
+        renderTable();
+        updateStats();
+      }
+    } catch (err) {
+      document.getElementById('table-body').innerHTML =
+        '<div class="empty"><p>Could not load data. Make sure the API is running.</p></div>';
+    }
+  }
+
+  function updateStats() {
+    const pending = surveyData.filter(d => d.status === 'pending').length;
+    const eligible = surveyData.filter(d => d.status === 'eligible').length;
+    const notEligible = surveyData.filter(d => d.status === 'not_eligible').length;
+    document.getElementById('stat-pending').textContent = pending;
+    document.getElementById('stat-eligible').textContent = eligible;
+    document.getElementById('stat-not').textContent = notEligible;
+  }
+
+  function renderTable() {
+    if (surveyData.length === 0) {
+      document.getElementById('table-body').innerHTML =
+        '<div class="empty"><p>No survey responses yet. Data will appear here after customers complete the survey via WhatsApp.</p></div>';
+      return;
+    }
+
+    let html = '<table><thead><tr>';
+    html += '<th>Customer</th><th>Phone</th><th>Age</th><th>Health</th><th>Exercise</th><th>Spending</th><th>Submitted</th><th>Status</th><th>Action</th>';
+    html += '</tr></thead><tbody>';
+
+    surveyData.forEach((d, i) => {
+      const badgeClass = d.status === 'eligible' ? 'badge-eligible' : d.status === 'not_eligible' ? 'badge-not' : 'badge-pending';
+      const badgeText = d.status === 'eligible' ? 'Eligible' : d.status === 'not_eligible' ? 'Not Eligible' : 'Pending';
+      const isPending = d.status === 'pending';
+      const date = new Date(d.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+      html += `<tr>
+        <td><strong>${d.customerName}</strong></td>
+        <td>${d.customerNo}</td>
+        <td>${d.age}</td>
+        <td>${d.health}</td>
+        <td>${d.exercise}</td>
+        <td>${d.monthlySpend}</td>
+        <td>${date}</td>
+        <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+        <td>
+          <div class="action-btns">
+            <button class="btn btn-eligible" ${!isPending ? 'disabled' : ''} onclick="sendResult(${i}, 'eligible')">✓ Eligible</button>
+            <button class="btn btn-not" ${!isPending ? 'disabled' : ''} onclick="sendResult(${i}, 'not_eligible')">✗ Not Eligible</button>
+          </div>
+        </td>
+      </tr>`;
+    });
+
+    html += '</tbody></table>';
+    document.getElementById('table-body').innerHTML = html;
+  }
+
+  async function sendResult(index, status) {
+    const entry = surveyData[index];
+    if (!entry) return;
+
+    const label = status === 'eligible' ? 'Eligible' : 'Not Eligible';
+    if (!confirm(`Send "${label}" template to ${entry.customerName} (${entry.customerNo})?`)) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/send-result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerNo: entry.customerNo,
+          customerName: entry.customerName,
+          status: status
+        })
+      });
+
+      const json = await res.json();
+
+      if (json.success) {
+        entry.status = status;
+        renderTable();
+        updateStats();
+        showToast(`✓ ${label} template sent to ${entry.customerName}`);
+      } else {
+        showToast(`✗ Failed: ${json.message}`);
+      }
+    } catch (err) {
+      showToast(`✗ Error: ${err.message}`);
+    }
+  }
+
+  function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+  }
+
+  // Load data on page load
+  loadData();
+
+  // Auto-refresh every 30 seconds
+  setInterval(loadData, 30000);
+</script>
+
+</body>
+</html>
