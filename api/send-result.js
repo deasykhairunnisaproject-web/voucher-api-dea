@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   // WABA API Configuration
   // Replace these with your actual values:
   // ============================================================
-  const PHONE_NUMBER_ID = 'YOUR_PHONE_NUMBER_ID';   // From Meta Business Manager
+  const PHONE_NUMBER_ID = '456235350898330';   // From Meta Business Manager
   const ACCESS_TOKEN = 'YOUR_ACCESS_TOKEN';           // From Meta Business Manager
   const TEMPLATE_ELIGIBLE = 'prudential_eligible';     // Template name (approved by Meta)
   const TEMPLATE_NOT_ELIGIBLE = 'prudential_not_eligible'; // Template name
