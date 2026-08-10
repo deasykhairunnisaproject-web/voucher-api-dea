@@ -69,7 +69,7 @@ export default function handler(req, res) {
 
   return res.status(200).json({
     success: true,
-    eligible: isEligible ? 'yes' : 'no',
+    eligible: isEligible ? 'true' : 'false',
     customerNo: customerNo,
     customerName: customerName || 'Customer',
     score: score + '/' + maxScore,
