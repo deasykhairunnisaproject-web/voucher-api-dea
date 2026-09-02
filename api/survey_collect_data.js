@@ -65,7 +65,7 @@ export default async function handler(req, res) {
   // LOG KE GOOGLE SHEETS (async, non-blocking)
   // Ganti URL dengan Google Apps Script deployment URL kamu
   // ============================================================
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxTZnDnYFdKbEnXXW4zneIK2-5IwAdyBcvkQ_WTKFkOcMT-2aPXXVvrWOZqpznc4Bbz/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzoPSJGzZGis8-iKrx40RTjnWzyJYGIaFpUnc5Zr_kUu_Oi5ybXJ_KU1WlzggdmG59i/exec";
 
   try {
     if (APPS_SCRIPT_URL && !APPS_SCRIPT_URL.includes("GANTI_DENGAN")) {
