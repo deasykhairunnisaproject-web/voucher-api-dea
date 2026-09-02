@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   // GOOGLE APPS SCRIPT URL (untuk logging)
   // Kosongkan kalau belum setup, logging akan di-skip
   // =============================================
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/GANTI_DENGAN_ID_KAMU/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxA4Qh2GP0LzceTWd2TZYagddot2lEoa5V9LlCa7bym3iSQP9p_5R_jDsstkLBuypnB/exec";
 
   // =============================================
   // LOG DATA USER KE GOOGLE SHEETS (async, tidak blocking)
