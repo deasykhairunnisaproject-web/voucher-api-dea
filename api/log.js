@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   // GANTI URL INI dengan Google Apps Script URL kamu
   // (lihat panduan setup di bawah)
   // =============================================
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/GANTI_DENGAN_ID_KAMU/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxA4Qh2GP0LzceTWd2TZYagddot2lEoa5V9LlCa7bym3iSQP9p_5R_jDsstkLBuypnB/exec";
 
   try {
     const response = await fetch(APPS_SCRIPT_URL, {
