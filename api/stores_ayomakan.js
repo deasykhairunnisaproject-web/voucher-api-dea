@@ -1,101 +1,42 @@
-// api/stores_ayomakan.js — AyoMakan Promo Merchant API + Logging
-// OPTIMIZED: cache Google Sheets data + non-blocking log + follow redirect
-
-const SHEET_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPN0G04ZUa-CdOfZzs69LrwDSdHj23VF1n7a35IaIjzbjHBnZKKCihNGoJviC5rw/pub?gid=368281439&single=true&output=csv";
-
-const LOG_URL =
-  "https://script.google.com/macros/s/AKfycbzer3cDrbE3a4va3MJ-gDX_48YFx7m__tYl7RjSNdIkU6r0rZoJfSscKL3z-GR1rJiY/exec";
-
-// =====================================================
-// CACHE — simpan data merchant di memory 5 menit
-// Biar nggak fetch Google Sheets tiap request
-// =====================================================
-let cachedMerchants = null;
-let cacheTime = 0;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 menit
-
-async function getMerchants() {
-  const now = Date.now();
-  if (cachedMerchants && (now - cacheTime) < CACHE_DURATION) {
-    return cachedMerchants;
-  }
-  const response = await fetch(SHEET_URL);
-  const csvText = await response.text();
-  cachedMerchants = parseCSV(csvText);
-  cacheTime = now;
-  return cachedMerchants;
-}
-
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") {
-    return res.status(200).json({ success: "false", errormsg: "Method not allowed" });
-  }
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  const { lat, lng, area, customerNo, customerName } = req.body || {};
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ success: "false", errormsg: "Method not allowed" });
 
-  let merchants = [];
+  const { lat, lng, customerNo, customerName } = req.body || {};
+
+  // =============================================
+  // LOGGING ke Google Apps Script (non-blocking)
+  // =============================================
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzer3cDrbE3a4va3MJ-gDX_48YFx7m__tYl7RjSNdIkU6r0rZoJfSscKL3z-GR1rJiY/exec";
+
   try {
-    merchants = await getMerchants();
-  } catch (err) {
-    return res.status(200).json({
-      success: "false",
-      errormsg: "Gagal mengambil data merchant. Coba lagi nanti ya!",
-    });
-  }
-
-  if (merchants.length === 0) {
-    return res.status(200).json({
-      success: "false",
-      errormsg: "Data merchant kosong. Pastikan Google Sheets sudah di-publish.",
-    });
-  }
-
-  // MODE 1: By area
-  if (area) {
-    const areaLower = area.toLowerCase();
-    const filtered = merchants
-      .filter(
-        (m) =>
-          m.area.toLowerCase().includes(areaLower) ||
-          m.subArea.toLowerCase().includes(areaLower)
-      )
-      .map(enrichMerchant);
-
-    if (filtered.length === 0) {
-      logToSheet({ customerNo, customerName, area, lat: "-", lng: "-", result: "Tidak ada promo", stores: "-" });
-      return res.status(200).json({
-        success: "false",
-        errormsg: "Belum ada promo merchant di area " + area + ". Coba area lain ya!",
-      });
+    if (APPS_SCRIPT_URL && !APPS_SCRIPT_URL.includes("GANTI_")) {
+      fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerNo: customerNo || '',
+          customerName: customerName || '',
+          lat: lat || '',
+          lng: lng || '',
+          action: 'Cek Promo AyoMakan',
+          timestamp: new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
+        })
+      }).catch(() => {});
     }
+  } catch (e) {}
 
-    const top5 = filtered.slice(0, 5);
-    logToSheet({
-      customerNo, customerName, area,
-      lat: "-", lng: "-",
-      result: "Sukses",
-      stores: top5.map((s) => s.name).join(", "),
-    });
-
-    return res.status(200).json({
-      success: "true",
-      total: top5.length,
-      area: area,
-      message: formatMessage(top5, area),
-      ...flatFields(top5),
-    });
-  }
-
-  // MODE 2: By lat/lng
+  // =============================================
+  // VALIDASI LOKASI
+  // =============================================
   if (!lat || !lng) {
     return res.status(200).json({
       success: "false",
-      errormsg: "Lokasi belum diterima. Silakan kirim lokasi kamu ya!",
+      errormsg: "Mohon kirimkan lokasi kamu terlebih dahulu ya"
     });
   }
 
@@ -105,185 +46,105 @@ export default async function handler(req, res) {
   if (isNaN(userLat) || isNaN(userLng)) {
     return res.status(200).json({
       success: "false",
-      errormsg: "Format lokasi tidak valid. Coba kirim ulang lokasi kamu ya!",
+      errormsg: "Format lokasi tidak valid. Silakan coba kirim ulang lokasi kamu"
     });
   }
 
-  const radius = 15;
-  const nearby = merchants
-    .filter((m) => m.deliveryReady)
-    .map((m) => ({
-      ...enrichMerchant(m),
-      distance: haversine(userLat, userLng, m.lat, m.lng),
-    }))
-    .sort((a, b) => a.distance - b.distance)
-    .filter((m) => m.distance <= radius)
-    .slice(0, 5);
+  // =============================================
+  // GANTI SHEET_URL — pakai format /export?format=csv
+  // (sama kayak betamart)
+  // =============================================
+  const SHEET_URL = "https://docs.google.com/spreadsheets/d/17dy8s8bUzROnp-_PT5OKbrVqI5x-Sw7k/export?format=csv";
 
-  if (nearby.length === 0) {
-    logToSheet({ customerNo, customerName, area: "-", lat, lng, result: "Tidak ada promo di sekitar", stores: "-" });
+  const RADIUS_KM = 15;
+  const MAX_RESULTS = 5;
+
+  try {
+    const response = await fetch(SHEET_URL);
+    const csvText = await response.text();
+
+    const lines = csvText.split('\n');
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+
+    const stores = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+
+      const values = [];
+      let current = '';
+      let inQuotes = false;
+      for (let c = 0; c < lines[i].length; c++) {
+        const char = lines[i][c];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          values.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      values.push(current.trim());
+
+      const store = {};
+      headers.forEach((header, index) => {
+        store[header] = values[index] || '';
+      });
+      stores.push(store);
+    }
+
+    function haversine(lat1, lng1, lat2, lng2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    const storesWithDistance = stores
+      .map(store => {
+        const storeLat = parseFloat(store.lat);
+        const storeLng = parseFloat(store.lng);
+        if (isNaN(storeLat) || isNaN(storeLng)) return null;
+        const distance = haversine(userLat, userLng, storeLat, storeLng);
+        return { ...store, distance };
+      })
+      .filter(s => s !== null && s.distance <= RADIUS_KM)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, MAX_RESULTS);
+
+    if (storesWithDistance.length === 0) {
+      return res.status(200).json({
+        success: "false",
+        errormsg: "Maaf, belum ada promo merchant AyoMakan dalam radius " + RADIUS_KM + " km dari lokasi kamu\n\nCoba kirim lokasi lain ya!"
+      });
+    }
+
+    let storeList = "";
+    storesWithDistance.forEach((store, i) => {
+      const km = store.distance.toFixed(1);
+      const branchLink = "https://ayomakan.co.id/branch/" + (store.slug || '');
+      const mapsLink = "https://www.google.com/maps?saddr=My+Location&daddr=" + store.lat + "," + store.lng;
+      storeList += (i + 1) + ". *" + store.name + "* (" + km + " km)\n";
+      storeList += store.promo + "\n";
+      storeList += store.subArea + " | " + store.category + "\n";
+      storeList += "Pesan: " + branchLink + "\n";
+      storeList += "Lokasi: " + mapsLink + "\n";
+      if (i < storesWithDistance.length - 1) storeList += "\n";
+    });
+
+    return res.status(200).json({
+      success: "true",
+      total: storesWithDistance.length.toString(),
+      message: "*Top " + storesWithDistance.length + " Promo AyoMakan Terdekat:*\n\n" + storeList + "\n_Promo mengikuti kuota & ketentuan merchant_"
+    });
+
+  } catch (error) {
     return res.status(200).json({
       success: "false",
-      errormsg: "Maaf, belum ada promo merchant AyoMakan di sekitar lokasi kamu. Coba cek area lain ya!",
+      errormsg: "Maaf, terjadi gangguan saat mengambil data. Silakan coba lagi nanti"
     });
   }
-
-  // Log (non-blocking — kirim tapi nggak nunggu)
-  logToSheet({
-    customerNo, customerName,
-    area: nearby[0]?.area || "-",
-    lat, lng,
-    result: "Sukses",
-    stores: nearby.map((s) => s.name + " (" + s.distance.toFixed(1) + "km)").join(", "),
-  });
-
-  return res.status(200).json({
-    success: "true",
-    total: nearby.length,
-    message: formatMessageWithDistance(nearby),
-    ...flatFieldsWithDistance(nearby),
-  });
-}
-
-// =====================================================
-// LOG — fire & forget, follow redirect (fix Apps Script)
-// =====================================================
-function logToSheet(data) {
-  try {
-    fetch(LOG_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify({
-        timestamp: new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }),
-        customerNo: data.customerNo || "-",
-        customerName: data.customerName || "-",
-        area: data.area || "-",
-        lat: data.lat || "-",
-        lng: data.lng || "-",
-        result: data.result || "-",
-        stores: data.stores || "-",
-      }),
-      redirect: "follow",
-    }).catch(() => {});
-  } catch (e) {}
-}
-
-// =====================================================
-// CSV Parser
-// =====================================================
-function parseCSV(csv) {
-  const lines = csv.split("\n").filter((l) => l.trim());
-  if (lines.length < 2) return [];
-  const headers = parseCSVLine(lines[0]);
-  const merchants = [];
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i]);
-    if (values.length < headers.length) continue;
-    const obj = {};
-    headers.forEach((h, idx) => {
-      obj[h.trim()] = values[idx]?.trim() || "";
-    });
-    if (!obj.name) continue;
-    merchants.push({
-      name: obj.name,
-      slug: obj.slug,
-      lat: parseFloat(obj.lat) || 0,
-      lng: parseFloat(obj.lng) || 0,
-      area: obj.area,
-      subArea: obj.subArea,
-      promo: obj.promo,
-      discount: obj.discount,
-      category: obj.category,
-      deliveryReady: (obj.deliveryReady || "").toUpperCase() === "TRUE",
-    });
-  }
-  return merchants;
-}
-
-function parseCSVLine(line) {
-  const result = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-      else { inQuotes = !inQuotes; }
-    } else if (ch === "," && !inQuotes) {
-      result.push(current); current = "";
-    } else { current += ch; }
-  }
-  result.push(current);
-  return result;
-}
-
-// =====================================================
-// Helpers
-// =====================================================
-function enrichMerchant(m) {
-  return {
-    ...m,
-    branchLink: "https://ayomakan.co.id/branch/" + m.slug,
-    mapsLink: "https://www.google.com/maps?saddr=My+Location&daddr=" + m.lat + "," + m.lng,
-  };
-}
-
-function haversine(lat1, lng1, lat2, lng2) {
-  const R = 6371;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function toRad(deg) { return deg * (Math.PI / 180); }
-
-function flatFields(stores) {
-  const out = {};
-  stores.forEach((s, i) => {
-    const n = i + 1;
-    out["store" + n] = s.name + " - " + s.promo;
-    out["link" + n] = s.branchLink;
-    out["maps" + n] = s.mapsLink;
-  });
-  return out;
-}
-
-function flatFieldsWithDistance(stores) {
-  const out = {};
-  stores.forEach((s, i) => {
-    const n = i + 1;
-    out["store" + n] = s.name + " - " + s.promo + " (" + s.distance.toFixed(1) + " km)";
-    out["link" + n] = s.branchLink;
-    out["maps" + n] = s.mapsLink;
-  });
-  return out;
-}
-
-function formatMessage(stores, area) {
-  let msg = "*Top " + stores.length + " Promo AyoMakan di " + area + ":*\n\n";
-  stores.forEach((s, i) => {
-    msg += "*" + (i + 1) + ". " + s.name + "*\n";
-    msg += s.promo + "\n";
-    msg += s.subArea + "\n";
-    msg += s.category + "\n";
-    msg += "Pesan: " + s.branchLink + "\n";
-    msg += "Lokasi: " + s.mapsLink + "\n\n";
-  });
-  msg += "_Promo mengikuti kuota & ketentuan merchant_";
-  return msg;
-}
-
-function formatMessageWithDistance(stores) {
-  let msg = "*Top " + stores.length + " Promo Restoran Terdekat:*\n\n";
-  stores.forEach((s, i) => {
-    msg += "*" + (i + 1) + ". " + s.name + "*\n";
-    msg += s.promo + "\n";
-    msg += s.distance.toFixed(1) + " km - " + s.subArea + "\n";
-    msg += s.category + "\n";
-    msg += "Pesan: " + s.branchLink + "\n";
-    msg += "Lokasi: " + s.mapsLink + "\n\n";
-  });
-  msg += "_Promo mengikuti kuota & ketentuan merchant_";
-  return msg;
 }
