@@ -300,7 +300,7 @@ function formatMessageWithDistance(stores) {
   let msg = `*Top ${stores.length} Promo Restoran Terdekat:*\n\n`;
   stores.forEach((s, i) => {
     msg += `*${i + 1}. ${s.name}*\n`;
-    msg += `${s.promo}\n`;
+    msg += `🎁_*${s.promo}\n*_`;
     msg += `${s.distance.toFixed(1)} km - ${s.subArea}\n`;
     msg += `${s.category}\n`;
     msg += `Pesan: ${s.branchLink}\n`;
