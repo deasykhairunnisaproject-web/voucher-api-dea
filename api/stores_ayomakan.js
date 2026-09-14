@@ -9,7 +9,7 @@
 // 2. LOG_URL   = Google Apps Script Web App URL (logging)
 // =====================================================
 const SHEET_URL =
-  "https://docs.google.com/spreadsheets/d/e/17dy8s8bUzROnp-_PT5OKbrVqI5x-Sw7k/pub?gid=0&single=true&output=csv";
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPN0G04ZUa-CdOfZzs69LrwDSdHj23VF1n7a35IaIjzbjHBnZKKCihNGoJviC5rw/pub?gid=368281439&single=true&output=csv";
 
 const LOG_URL =
   "https://script.google.com/macros/s/AKfycby1N695h7fS3jemwxbti9k6-DsLBx69ApNulrV7zDTh8959W6RtlD4TqHo8LfqLkhht/exec";
