@@ -12,7 +12,7 @@ const SHEET_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPN0G04ZUa-CdOfZzs69LrwDSdHj23VF1n7a35IaIjzbjHBnZKKCihNGoJviC5rw/pub?gid=368281439&single=true&output=csv";
 
 const LOG_URL =
-  "https://script.google.com/macros/s/AKfycby1N695h7fS3jemwxbti9k6-DsLBx69ApNulrV7zDTh8959W6RtlD4TqHo8LfqLkhht/exec";
+  "https://script.google.com/macros/s/AKfycbzer3cDrbE3a4va3MJ-gDX_48YFx7m__tYl7RjSNdIkU6r0rZoJfSscKL3z-GR1rJiY/exec";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
