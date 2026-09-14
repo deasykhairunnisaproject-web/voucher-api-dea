@@ -1,18 +1,31 @@
-// api/stores.js — AyoMakan Promo Merchant API + Logging
-// Data merchant dari Google Sheets (Publish to Web → CSV)
-// Log user ke Google Sheets via Google Apps Script
-// Deploy ke Vercel via GitHub
+// api/stores_ayomakan.js — AyoMakan Promo Merchant API + Logging
+// OPTIMIZED: cache Google Sheets data + non-blocking log + follow redirect
 
-// =====================================================
-// GANTI 2 URL INI:
-// 1. SHEET_URL = Google Sheets Publish to Web CSV (data merchant)
-// 2. LOG_URL   = Google Apps Script Web App URL (logging)
-// =====================================================
 const SHEET_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPN0G04ZUa-CdOfZzs69LrwDSdHj23VF1n7a35IaIjzbjHBnZKKCihNGoJviC5rw/pub?gid=368281439&single=true&output=csv";
 
 const LOG_URL =
   "https://script.google.com/macros/s/AKfycbzer3cDrbE3a4va3MJ-gDX_48YFx7m__tYl7RjSNdIkU6r0rZoJfSscKL3z-GR1rJiY/exec";
+
+// =====================================================
+// CACHE — simpan data merchant di memory 5 menit
+// Biar nggak fetch Google Sheets tiap request
+// =====================================================
+let cachedMerchants = null;
+let cacheTime = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 menit
+
+async function getMerchants() {
+  const now = Date.now();
+  if (cachedMerchants && (now - cacheTime) < CACHE_DURATION) {
+    return cachedMerchants;
+  }
+  const response = await fetch(SHEET_URL);
+  const csvText = await response.text();
+  cachedMerchants = parseCSV(csvText);
+  cacheTime = now;
+  return cachedMerchants;
+}
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -20,17 +33,14 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {
-    return res.status(405).json({ success: "false", errormsg: "Method not allowed" });
+    return res.status(200).json({ success: "false", errormsg: "Method not allowed" });
   }
 
   const { lat, lng, area, customerNo, customerName } = req.body || {};
 
-  // Fetch data merchant dari Google Sheets
   let merchants = [];
   try {
-    const response = await fetch(SHEET_URL);
-    const csvText = await response.text();
-    merchants = parseCSV(csvText);
+    merchants = await getMerchants();
   } catch (err) {
     return res.status(200).json({
       success: "false",
@@ -45,9 +55,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // =====================================================
   // MODE 1: By area
-  // =====================================================
   if (area) {
     const areaLower = area.toLowerCase();
     const filtered = merchants
@@ -59,23 +67,17 @@ export default async function handler(req, res) {
       .map(enrichMerchant);
 
     if (filtered.length === 0) {
-      // Log: tidak ditemukan
-      logToSheet(LOG_URL, { customerNo, customerName, area, lat: "-", lng: "-", result: "Tidak ada promo", stores: "-" });
+      logToSheet({ customerNo, customerName, area, lat: "-", lng: "-", result: "Tidak ada promo", stores: "-" });
       return res.status(200).json({
         success: "false",
-        errormsg: `Belum ada promo merchant di area ${area}. Coba area lain ya!`,
+        errormsg: "Belum ada promo merchant di area " + area + ". Coba area lain ya!",
       });
     }
 
     const top5 = filtered.slice(0, 5);
-
-    // Log: sukses by area
-    logToSheet(LOG_URL, {
-      customerNo,
-      customerName,
-      area,
-      lat: "-",
-      lng: "-",
+    logToSheet({
+      customerNo, customerName, area,
+      lat: "-", lng: "-",
       result: "Sukses",
       stores: top5.map((s) => s.name).join(", "),
     });
@@ -89,9 +91,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // =====================================================
   // MODE 2: By lat/lng
-  // =====================================================
   if (!lat || !lng) {
     return res.status(200).json({
       success: "false",
@@ -121,23 +121,20 @@ export default async function handler(req, res) {
     .slice(0, 5);
 
   if (nearby.length === 0) {
-    // Log: tidak ditemukan
-    logToSheet(LOG_URL, { customerNo, customerName, area: "-", lat, lng, result: "Tidak ada promo di sekitar", stores: "-" });
+    logToSheet({ customerNo, customerName, area: "-", lat, lng, result: "Tidak ada promo di sekitar", stores: "-" });
     return res.status(200).json({
       success: "false",
       errormsg: "Maaf, belum ada promo merchant AyoMakan di sekitar lokasi kamu. Coba cek area lain ya!",
     });
   }
 
-  // Log: sukses by location
-  logToSheet(LOG_URL, {
-    customerNo,
-    customerName,
+  // Log (non-blocking — kirim tapi nggak nunggu)
+  logToSheet({
+    customerNo, customerName,
     area: nearby[0]?.area || "-",
-    lat,
-    lng,
+    lat, lng,
     result: "Sukses",
-    stores: nearby.map((s) => `${s.name} (${s.distance.toFixed(1)}km)`).join(", "),
+    stores: nearby.map((s) => s.name + " (" + s.distance.toFixed(1) + "km)").join(", "),
   });
 
   return res.status(200).json({
@@ -149,13 +146,13 @@ export default async function handler(req, res) {
 }
 
 // =====================================================
-// LOG ke Google Sheets via Apps Script (fire & forget)
+// LOG — fire & forget, follow redirect (fix Apps Script)
 // =====================================================
-async function logToSheet(url, data) {
+function logToSheet(data) {
   try {
-    await fetch(url, {
+    fetch(LOG_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain" },
       body: JSON.stringify({
         timestamp: new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }),
         customerNo: data.customerNo || "-",
@@ -166,33 +163,27 @@ async function logToSheet(url, data) {
         result: data.result || "-",
         stores: data.stores || "-",
       }),
-    });
-  } catch (e) {
-    // Logging gagal bukan masalah — jangan block response
-  }
+      redirect: "follow",
+    }).catch(() => {});
+  } catch (e) {}
 }
 
 // =====================================================
-// Parse CSV dari Google Sheets
+// CSV Parser
 // =====================================================
 function parseCSV(csv) {
   const lines = csv.split("\n").filter((l) => l.trim());
   if (lines.length < 2) return [];
-
   const headers = parseCSVLine(lines[0]);
   const merchants = [];
-
   for (let i = 1; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
     if (values.length < headers.length) continue;
-
     const obj = {};
     headers.forEach((h, idx) => {
       obj[h.trim()] = values[idx]?.trim() || "";
     });
-
     if (!obj.name) continue;
-
     merchants.push({
       name: obj.name,
       slug: obj.slug,
@@ -206,7 +197,6 @@ function parseCSV(csv) {
       deliveryReady: (obj.deliveryReady || "").toUpperCase() === "TRUE",
     });
   }
-
   return merchants;
 }
 
@@ -214,22 +204,14 @@ function parseCSVLine(line) {
   const result = [];
   let current = "";
   let inQuotes = false;
-
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else { inQuotes = !inQuotes; }
     } else if (ch === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-    } else {
-      current += ch;
-    }
+      result.push(current); current = "";
+    } else { current += ch; }
   }
   result.push(current);
   return result;
@@ -241,8 +223,8 @@ function parseCSVLine(line) {
 function enrichMerchant(m) {
   return {
     ...m,
-    branchLink: `https://ayomakan.co.id/branch/${m.slug}`,
-    mapsLink: `https://www.google.com/maps?saddr=My+Location&daddr=${m.lat},${m.lng}`,
+    branchLink: "https://ayomakan.co.id/branch/" + m.slug,
+    mapsLink: "https://www.google.com/maps?saddr=My+Location&daddr=" + m.lat + "," + m.lng,
   };
 }
 
@@ -250,23 +232,19 @@ function haversine(lat1, lng1, lat2, lng2) {
   const R = 6371;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function toRad(deg) {
-  return deg * (Math.PI / 180);
-}
+function toRad(deg) { return deg * (Math.PI / 180); }
 
 function flatFields(stores) {
   const out = {};
   stores.forEach((s, i) => {
     const n = i + 1;
-    out[`store${n}`] = `${s.name} - ${s.promo}`;
-    out[`link${n}`] = s.branchLink;
-    out[`maps${n}`] = s.mapsLink;
+    out["store" + n] = s.name + " - " + s.promo;
+    out["link" + n] = s.branchLink;
+    out["maps" + n] = s.mapsLink;
   });
   return out;
 }
@@ -275,37 +253,37 @@ function flatFieldsWithDistance(stores) {
   const out = {};
   stores.forEach((s, i) => {
     const n = i + 1;
-    out[`store${n}`] = `${s.name} - ${s.promo} (${s.distance.toFixed(1)} km)`;
-    out[`link${n}`] = s.branchLink;
-    out[`maps${n}`] = s.mapsLink;
+    out["store" + n] = s.name + " - " + s.promo + " (" + s.distance.toFixed(1) + " km)";
+    out["link" + n] = s.branchLink;
+    out["maps" + n] = s.mapsLink;
   });
   return out;
 }
 
 function formatMessage(stores, area) {
-  let msg = `*Top ${stores.length} Promo AyoMakan di ${area}:*\n\n`;
+  let msg = "*Top " + stores.length + " Promo AyoMakan di " + area + ":*\n\n";
   stores.forEach((s, i) => {
-    msg += `*${i + 1}. ${s.name}*\n`;
-    msg += `${s.promo}\n`;
-    msg += `${s.subArea}\n`;
-    msg += `${s.category}\n`;
-    msg += `Pesan: ${s.branchLink}\n`;
-    msg += `Lokasi: ${s.mapsLink}\n\n`;
+    msg += "*" + (i + 1) + ". " + s.name + "*\n";
+    msg += s.promo + "\n";
+    msg += s.subArea + "\n";
+    msg += s.category + "\n";
+    msg += "Pesan: " + s.branchLink + "\n";
+    msg += "Lokasi: " + s.mapsLink + "\n\n";
   });
-  msg += `_Promo mengikuti kuota & ketentuan merchant_`;
+  msg += "_Promo mengikuti kuota & ketentuan merchant_";
   return msg;
 }
 
 function formatMessageWithDistance(stores) {
-  let msg = `*Top ${stores.length} Promo Restoran Terdekat:*\n\n`;
+  let msg = "*Top " + stores.length + " Promo Restoran Terdekat:*\n\n";
   stores.forEach((s, i) => {
-    msg += `*${i + 1}. ${s.name}*\n`;
-    msg += `🎁_*${s.promo}*_\n`;
-    msg += `${s.distance.toFixed(1)} km - ${s.subArea}\n`;
-    msg += `${s.category}\n`;
-    msg += `Pesan: ${s.branchLink}\n`;
-    msg += `Lokasi: ${s.mapsLink}\n\n`;
+    msg += "*" + (i + 1) + ". " + s.name + "*\n";
+    msg += s.promo + "\n";
+    msg += s.distance.toFixed(1) + " km - " + s.subArea + "\n";
+    msg += s.category + "\n";
+    msg += "Pesan: " + s.branchLink + "\n";
+    msg += "Lokasi: " + s.mapsLink + "\n\n";
   });
-  msg += `_Promo mengikuti kuota & ketentuan merchant_`;
+  msg += "_Promo mengikuti kuota & ketentuan merchant_";
   return msg;
 }
