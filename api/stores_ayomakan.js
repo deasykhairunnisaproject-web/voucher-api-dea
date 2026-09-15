@@ -4,15 +4,12 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ success: "false", errormsg: "Method not allowed" });
+  if (req.method !== 'POST') return res.status(405).json({ success: "false", message: 'Method not allowed' });
 
-  const { lat, lng, customerNo, customerName } = req.body || {};
+  const { latitude, longitude, customerNo, customerName } = req.body || {};
 
-  // =============================================
-  // LOGGING ke Google Apps Script (non-blocking)
-  // =============================================
+  // LOGGING (non-blocking)
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzer3cDrbE3a4va3MJ-gDX_48YFx7m__tYl7RjSNdIkU6r0rZoJfSscKL3z-GR1rJiY/exec";
-
   try {
     if (APPS_SCRIPT_URL && !APPS_SCRIPT_URL.includes("GANTI_")) {
       fetch(APPS_SCRIPT_URL, {
@@ -21,8 +18,8 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           customerNo: customerNo || '',
           customerName: customerName || '',
-          lat: lat || '',
-          lng: lng || '',
+          latitude: latitude || '',
+          longitude: longitude || '',
           action: 'Cek Promo AyoMakan',
           timestamp: new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
         })
@@ -30,31 +27,25 @@ export default async function handler(req, res) {
     }
   } catch (e) {}
 
-  // =============================================
-  // VALIDASI LOKASI
-  // =============================================
-  if (!lat || !lng) {
+  if (!latitude || !longitude) {
     return res.status(200).json({
       success: "false",
-      errormsg: "Mohon kirimkan lokasi kamu terlebih dahulu ya"
+      message: "Mohon kirimkan lokasi kamu terlebih dahulu ya"
     });
   }
 
-  const userLat = parseFloat(lat);
-  const userLng = parseFloat(lng);
+  const userLat = parseFloat(latitude);
+  const userLng = parseFloat(longitude);
 
   if (isNaN(userLat) || isNaN(userLng)) {
     return res.status(200).json({
       success: "false",
-      errormsg: "Format lokasi tidak valid. Silakan coba kirim ulang lokasi kamu"
+      message: "Format lokasi tidak valid. Silakan coba kirim ulang lokasi kamu"
     });
   }
 
-  // =============================================
-  // GANTI SHEET_URL — pakai format /export?format=csv
-  // (sama kayak betamart)
-  // =============================================
-  const SHEET_URL = "https://docs.google.com/spreadsheets/d/17dy8s8bUzROnp-_PT5OKbrVqI5x-Sw7k/export?format=csv";
+  // GANTI DENGAN SHEET URL KAMU (format: /export?format=csv)
+  const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPN0G04ZUa-CdOfZzs69LrwDSdHj23VF1n7a35IaIjzbjHBnZKKCihNGoJviC5rw/pub?gid=368281439&single=true&output=csv";
 
   const RADIUS_KM = 15;
   const MAX_RESULTS = 5;
@@ -118,33 +109,31 @@ export default async function handler(req, res) {
     if (storesWithDistance.length === 0) {
       return res.status(200).json({
         success: "false",
-        errormsg: "Maaf, belum ada promo merchant AyoMakan dalam radius " + RADIUS_KM + " km dari lokasi kamu\n\nCoba kirim lokasi lain ya!"
+        message: "Maaf, belum ada promo AyoMakan dalam radius " + RADIUS_KM + " km dari lokasi kamu\n\nCoba kirim lokasi lain ya!"
       });
     }
 
     let storeList = "";
     storesWithDistance.forEach((store, i) => {
       const km = store.distance.toFixed(1);
-      const branchLink = "https://ayomakan.co.id/branch/" + (store.slug || '');
-      const mapsLink = "https://www.google.com/maps?saddr=My+Location&daddr=" + store.lat + "," + store.lng;
       storeList += (i + 1) + ". *" + store.name + "* (" + km + " km)\n";
-      storeList += store.promo + "\n";
-      storeList += store.subArea + " | " + store.category + "\n";
-      storeList += "Pesan: " + branchLink + "\n";
-      storeList += "Lokasi: " + mapsLink + "\n";
+      storeList += "📍 " + store.address + "\n";
+      storeList += "🏷️ *" + store.promo + "*\n";
+      if (store.maps) storeList += "🗺️ " + store.maps + "\n";
       if (i < storesWithDistance.length - 1) storeList += "\n";
     });
 
     return res.status(200).json({
       success: "true",
-      total: storesWithDistance.length.toString(),
-      message: "*Top " + storesWithDistance.length + " Promo AyoMakan Terdekat:*\n\n" + storeList + "\n_Promo mengikuti kuota & ketentuan merchant_"
+      count: storesWithDistance.length.toString(),
+      storeList: storeList,
+      message: "*Top " + storesWithDistance.length + " Promo AyoMakan terdekat dari lokasi kamu:*\n\n" + storeList + "\n_Promo mengikuti kuota & ketentuan merchant_"
     });
 
   } catch (error) {
     return res.status(200).json({
       success: "false",
-      errormsg: "Maaf, terjadi gangguan saat mengambil data. Silakan coba lagi nanti"
+      message: "Maaf, terjadi gangguan. Silakan coba lagi nanti"
     });
   }
 }
